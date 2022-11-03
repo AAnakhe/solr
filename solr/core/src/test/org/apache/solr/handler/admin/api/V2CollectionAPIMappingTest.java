@@ -21,25 +21,36 @@ import static org.apache.solr.common.params.CollectionAdminParams.*;
 import static org.apache.solr.common.params.CommonAdminParams.ASYNC;
 import static org.apache.solr.common.params.CommonParams.*;
 import static org.apache.solr.common.params.CoreAdminParams.SHARD;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import com.google.common.collect.Maps;
+import io.opentracing.noop.NoopSpan;
 import org.apache.solr.api.Api;
+import org.apache.solr.cloud.OverseerSolrResponse;
+import org.apache.solr.cloud.api.collections.DistributedCollectionConfigSetCommandRunner;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.CommandOperation;
+import org.apache.solr.common.util.NamedList;
+import org.apache.solr.core.CoreContainer;
 import org.apache.solr.handler.admin.CollectionsHandler;
 import org.apache.solr.handler.admin.TestCollectionAPIs;
 import org.apache.solr.handler.admin.V2ApiMappingTest;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 
 /**
  * Unit tests for the V2 APIs found in {@link org.apache.solr.handler.admin.api} that use the
@@ -73,6 +84,14 @@ public class V2CollectionAPIMappingTest extends V2ApiMappingTest<CollectionsHand
     apiBag.registerObject(new RenameCollectionAPI(collectionsHandler));
   }
 
+  private CoreContainer mockCoreContainer;
+  private DistributedCollectionConfigSetCommandRunner mockCommandRunner;
+  private SolrQueryRequest mockQueryRequest;
+  private SolrQueryResponse queryResponse;
+  private ArgumentCaptor<ZkNodeProps> messageCapturer;
+  private RenameCollectionAPI renameCollectionAPI;
+
+
   @Override
   public CollectionsHandler createUnderlyingRequestHandler() {
     return createMock(CollectionsHandler.class);
@@ -96,8 +115,17 @@ public class V2CollectionAPIMappingTest extends V2ApiMappingTest<CollectionsHand
 
 
   @Test
-  public void testRenameCollectionAllParams(){
+  public void testRenameCollectionAllParams() throws Exception {
+    when(mockCoreContainer.isZooKeeperAware()).thenReturn(false);
+
     final SolrQueryRequest request = runRenameCollectionsApi("/collections/collName");
+
+    renameCollectionAPI.renameCollection(req("{ 'rename' : {"
+            + "'to': 'targetColl',"
+            + "'async': 'requestTrackingId',"
+            + "'followAliases': true}}"), queryResponse);
+
+
 
     assertEquals("rename", request.getContext().get(ACTION));
     assertEquals("collName", request.getContext().get(NAME));
@@ -273,7 +301,29 @@ public class V2CollectionAPIMappingTest extends V2ApiMappingTest<CollectionsHand
 
 
 
+  @BeforeClass
+  public static void sureWorkingMockito() {
+    assumeWorkingMockito();
+  }
 
+  @Before
+  public void setUp() throws Exception {
+    super.setUp();
+
+    mockCoreContainer = mock(CoreContainer.class);
+    mockCommandRunner = mock(DistributedCollectionConfigSetCommandRunner.class);
+    when(mockCoreContainer.getDistributedCollectionCommandRunner())
+            .thenReturn(Optional.of(mockCommandRunner));
+    when(mockCommandRunner.runCollectionCommand(any(), any(), anyLong()))
+            .thenReturn(new OverseerSolrResponse(new NamedList<>()));
+    mockQueryRequest = mock(SolrQueryRequest.class);
+    when(mockQueryRequest.getSpan()).thenReturn(NoopSpan.INSTANCE);
+    queryResponse = new SolrQueryResponse();
+    messageCapturer = ArgumentCaptor.forClass(ZkNodeProps.class);
+
+    renameCollectionAPI =
+            new RenameCollectionAPI(mockCoreContainer, mockQueryRequest, queryResponse);
+  }
 
 
   private SolrQueryRequest runRenameCollectionsApi(String path) {

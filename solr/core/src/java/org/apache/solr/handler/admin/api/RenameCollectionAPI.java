@@ -24,11 +24,13 @@ import org.apache.solr.client.solrj.request.beans.RenameCollectionPayload;
 import org.apache.solr.common.params.CollectionAdminParams;
 import org.apache.solr.common.params.CollectionParams;
 import org.apache.solr.common.util.ContentStream;
+import org.apache.solr.core.CoreContainer;
 import org.apache.solr.handler.admin.CollectionsHandler;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.util.SolrJacksonAnnotationInspector;
 
+import javax.inject.Inject;
 import java.util.Locale;
 
 import static org.apache.solr.client.solrj.SolrRequest.METHOD.POST;
@@ -42,19 +44,20 @@ import static org.apache.solr.security.PermissionNameProvider.Name.COLL_EDIT_PER
 
 
 public class RenameCollectionAPI {
+    
 
-
-
-    private final CollectionsHandler collectionsHandler;
-    public RenameCollectionAPI(CollectionsHandler collectionsHandler) {
-        this.collectionsHandler = collectionsHandler;
-    }
-
-    public static final String RENAME_COLLECTION_CMD = "rename";
-
+    private CollectionsHandler collectionsHandler;
+    
     private static final ObjectMapper mapper = SolrJacksonAnnotationInspector.createObjectMapper()
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
             .disable(MapperFeature.AUTO_DETECT_FIELDS);
+
+    public RenameCollectionAPI(CollectionsHandler collectionsHandler) {
+    }
+
+    public RenameCollectionAPI(CoreContainer mockCoreContainer, SolrQueryRequest mockQueryRequest, SolrQueryResponse queryResponse) {
+    }
+
 
     @EndPoint(
             path = {"/collections/{collection}/command/rename"},
@@ -80,4 +83,6 @@ public class RenameCollectionAPI {
                         v2Body.followAliases);
         collectionsHandler.handleRequestBody(req, rsp);
     }
+    
+    
 }
